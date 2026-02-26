@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hand Signal Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cinzel:wght@700&family=Cinzel+Decorative:wght@700&family=Orbitron:wght@700&family=Space+Mono:wght@700&family=Josefin+Sans:wght@100;300&family=UnifrakturMaguntia&display=block" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    #canvas-container { position: fixed; inset: 0; }
+
+    #webcam {
+      position: fixed; top: 16px; right: 16px;
+      width: 220px; height: auto; border-radius: 10px;
+      opacity: 0.75; transform: scaleX(-1); z-index: 10; pointer-events: none;
+    }
+    #landmark-overlay {
+      position: fixed; top: 16px; right: 16px; width: 220px;
+      border-radius: 10px; transform: scaleX(-1); z-index: 11; pointer-events: none;
+    }
+
+    /* Two gesture labels */
+    .gesture-label {
+      position: fixed; bottom: 36px;
+      color: rgba(255,255,255,0.75); font-size: 13px;
+      letter-spacing: 5px; text-transform: uppercase;
+      transition: color 0.4s ease, text-shadow 0.4s ease, opacity 0.35s ease;
+      pointer-events: none; user-select: none; white-space: nowrap;
+      text-shadow: 0 0 10px currentColor, 0 0 28px color-mix(in srgb, currentColor 50%, transparent),
+                   0 2px 5px rgba(0,0,0,0.95);
+      opacity: 0; /* hidden until fonts ready */
+    }
+    #label-left  { left: 24px; }
+    #label-right { right: 24px; text-align: right; }
+
+    /* Shrine label — centered, larger */
+    #label-shrine {
+      position: fixed; bottom: 36px; left: 50%;
+      transform: translateX(-50%);
+      color: #ff2200; font-size: 16px; letter-spacing: 8px;
+      font-family: 'Cinzel Decorative', serif;
+      text-transform: uppercase; pointer-events: none;
+      user-select: none; white-space: nowrap;
+      display: none;
+      text-shadow: 0 0 14px currentColor, 0 0 36px color-mix(in srgb, currentColor 55%, transparent),
+                   0 0 70px color-mix(in srgb, currentColor 25%, transparent),
+                   0 2px 6px rgba(0,0,0,0.95);
+      animation: shrine-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes shrine-pulse {
+      0%,100% { opacity: 0.85; }
+      50%      { opacity: 1.0; }
+    }
+
+    #hint {
+      position: fixed; bottom: 70px; left: 24px;
+      color: rgba(255,255,255,0.2); font-size: 11px;
+      letter-spacing: 2px; line-height: 2; pointer-events: none;
+    }
+
+    /* ── Cinematic label ─────────────────────────────────────────────── */
+    #cinematic-label {
+      position: fixed; bottom: 52px; left: 50%;
+      transform: translateX(-50%);
+      display: none; text-align: center;
+      white-space: nowrap; pointer-events: none; user-select: none;
+      z-index: 20; line-height: 1;
+    }
+    #cinematic-label span       { font-size: 5vw; letter-spacing: 0.12em; text-transform: uppercase;
+                                   text-shadow: 0 0 18px currentColor,
+                                                0 0 45px color-mix(in srgb, currentColor 50%, transparent),
+                                                0 3px 8px rgba(0,0,0,0.95); }
+    #cinematic-label .cin-plus  { font-size: 3.5vw; color: rgba(255,255,255,0.45);
+                                   font-family: 'Courier New', monospace; letter-spacing: 0.05em;
+                                   text-shadow: 0 0 8px rgba(255,255,255,0.25), 0 2px 4px rgba(0,0,0,0.9); }
+
+    /* ── Settings toggle ─────────────────────────────────────────────── */
+    #settings-toggle {
+      position: fixed; top: 20px; left: 24px;
+      color: rgba(255,255,255,0.3); font-size: 11px;
+      letter-spacing: 3px; text-transform: uppercase;
+      cursor: pointer; z-index: 40; user-select: none; transition: color 0.2s;
+    }
+    #settings-toggle:hover { color: rgba(255,255,255,0.75); }
+
+    /* ── Settings panel ──────────────────────────────────────────────── */
+    #settings-panel {
+      position: fixed; top: 0; left: -290px; width: 268px; height: 100vh;
+      background: rgba(0,0,0,0.88); backdrop-filter: blur(14px);
+      border-right: 1px solid rgba(255,255,255,0.07);
+      z-index: 35; padding: 56px 20px 40px;
+      transition: left 0.3s cubic-bezier(.4,0,.2,1);
+      overflow-y: auto; color: rgba(255,255,255,0.55);
+      font-size: 11px; letter-spacing: 1.5px;
+    }
+    #settings-panel.open { left: 0; }
+
+    .s-section { margin-bottom: 22px; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 14px; }
+    .s-section:first-child { border-top: none; padding-top: 0; }
+    .s-title { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.25); margin-bottom: 14px; }
+    .s-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .s-label { flex: 1; color: rgba(255,255,255,0.5); }
+    .s-val {
+      width: 58px; text-align: right; color: rgba(255,255,255,0.45); font-size: 10px;
+      background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.12);
+      outline: none; font-family: 'Courier New', monospace; letter-spacing: 1px;
+      -moz-appearance: textfield; padding-bottom: 1px;
+    }
+    .s-val::-webkit-outer-spin-button, .s-val::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .s-val:focus { color: rgba(255,255,255,0.8); border-bottom-color: rgba(255,255,255,0.35); }
+    .s-slider-block { margin-bottom: 14px; }
+    .s-slider-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+
+    input[type=range] {
+      -webkit-appearance: none; width: 100%; height: 2px;
+      background: rgba(255,255,255,0.12); border-radius: 2px; outline: none; margin: 4px 0;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 12px; height: 12px;
+      border-radius: 50%; background: rgba(255,255,255,0.7); cursor: pointer;
+    }
+    input[type=range]:disabled { opacity: 0.3; }
+
+    input[type=checkbox] {
+      -webkit-appearance: none; width: 16px; height: 16px;
+      border: 1px solid rgba(255,255,255,0.25); border-radius: 3px;
+      background: transparent; cursor: pointer; position: relative; flex-shrink: 0;
+    }
+    input[type=checkbox]:checked { background: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.6); }
+    input[type=checkbox]:checked::after { content: '✓'; position: absolute; top: -1px; left: 2px; font-size: 11px; color: #000; }
+  </style>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+  <video id="webcam" playsinline></video>
+  <canvas id="landmark-overlay"></canvas>
+
+  <div id="cinematic-label"></div>
+  <div class="gesture-label" id="label-left">—</div>
+  <div class="gesture-label" id="label-right">—</div>
+  <div id="label-shrine">🏯&nbsp; MALEVOLENT SHRINE</div>
+
+  <div id="hint">
+    ✊ FIST → collapse<br>
+    🖐 PALM → expand<br>
+    ☝️ POINT → beam<br>
+    🤏 PINCH → singularity<br>
+    ✌️ PEACE → wave<br>
+    🌌 INFINITE VOID → sphere<br>
+    🏯 MALEVOLENT SHRINE → two hands
+  </div>
+
+  <div id="settings-toggle">⚙ SETTINGS</div>
+
+  <div id="settings-panel">
+    <div class="s-section">
+      <div class="s-title">Particles</div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Count</span><input type="number" class="s-val" id="val-count" min="100" max="100000" step="100" value="10000"></div>
+        <input type="range" id="sl-count" min="100" max="100000" step="100" value="10000">
+      </div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Size</span><input type="number" class="s-val" id="val-size" min="0.005" max="0.07" step="0.001" value="0.022"></div>
+        <input type="range" id="sl-size" min="0.005" max="0.07" step="0.001" value="0.022">
+      </div>
+    </div>
+
+    <div class="s-section">
+      <div class="s-title">Glow</div>
+      <div class="s-row" style="margin-bottom:14px">
+        <span class="s-label">Enabled</span>
+        <input type="checkbox" id="cb-glow">
+      </div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Opacity</span><input type="number" class="s-val" id="val-glow-opacity" min="0.01" max="0.5" step="0.01" value="0.18"></div>
+        <input type="range" id="sl-glow-opacity" min="0.01" max="0.5" step="0.01" value="0.18" disabled>
+      </div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Size</span><input type="number" class="s-val" id="val-glow-size" min="0.03" max="0.25" step="0.005" value="0.09"></div>
+        <input type="range" id="sl-glow-size" min="0.03" max="0.25" step="0.005" value="0.09" disabled>
+      </div>
+    </div>
+
+    <div class="s-section">
+      <div class="s-title">Motion</div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Damping</span><input type="number" class="s-val" id="val-damp" min="0.70" max="0.97" step="0.01" value="0.87"></div>
+        <input type="range" id="sl-damp" min="0.70" max="0.97" step="0.01" value="0.87">
+      </div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Rotation</span><input type="number" class="s-val" id="val-rot" min="0" max="0.008" step="0.0002" value="0.0018"></div>
+        <input type="range" id="sl-rot" min="0" max="0.008" step="0.0002" value="0.0018">
+      </div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Transition</span><input type="number" class="s-val" id="val-trans" min="0.01" max="0.12" step="0.005" value="0.03"></div>
+        <input type="range" id="sl-trans" min="0.01" max="0.12" step="0.005" value="0.03">
+      </div>
+    </div>
+
+    <div class="s-section">
+      <div class="s-title">Detection</div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Confirm frames</span><input type="number" class="s-val" id="val-frames" min="1" max="6" step="1" value="2"></div>
+        <input type="range" id="sl-frames" min="1" max="6" step="1" value="2">
+      </div>
+      <div class="s-slider-block">
+        <div class="s-slider-row"><span class="s-label">Void threshold</span><input type="number" class="s-val" id="val-void" min="0.1" max="0.8" step="0.05" value="0.25"></div>
+        <input type="range" id="sl-void" min="0.1" max="0.8" step="0.05" value="0.25">
+      </div>
+    </div>
+
+    <div class="s-section">
+      <div class="s-title">Display</div>
+      <div class="s-row"><span class="s-label">Cinematic mode  <span style="opacity:0.4">[C]</span></span><input type="checkbox" id="cb-cinematic"></div>
+      <div class="s-row"><span class="s-label">Show camera</span><input type="checkbox" id="cb-camera" checked></div>
+      <div class="s-row"><span class="s-label">Show landmarks</span><input type="checkbox" id="cb-landmarks" checked></div>
+      <div class="s-row"><span class="s-label">Show hint list</span><input type="checkbox" id="cb-hint" checked></div>
+    </div>
+
+    <div class="s-section">
+      <div class="s-title">Gestures</div>
+      <div class="s-row"><span class="s-label">✊ Closed Fist</span><input type="checkbox" id="cb-g-fist"   checked></div>
+      <div class="s-row"><span class="s-label">🖐 Open Palm</span>  <input type="checkbox" id="cb-g-palm"   checked></div>
+      <div class="s-row"><span class="s-label">☝️ Point</span>      <input type="checkbox" id="cb-g-point"  checked></div>
+      <div class="s-row"><span class="s-label">🤏 Pinch</span>      <input type="checkbox" id="cb-g-pinch"  checked></div>
+      <div class="s-row"><span class="s-label">✌️ Peace</span>      <input type="checkbox" id="cb-g-peace"  checked></div>
+      <div class="s-row"><span class="s-label">🌌 Infinite Void</span><input type="checkbox" id="cb-g-void" checked></div>
+      <div class="s-row"><span class="s-label">🏯 Mal. Shrine</span><input type="checkbox" id="cb-g-shrine" checked></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <script>
+    // ─── Scene ────────────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    const cam3d = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+    cam3d.position.z = 6;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    window.addEventListener('resize', () => {
+      cam3d.aspect = innerWidth/innerHeight;
+      cam3d.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ─── Gesture enable/disable ───────────────────────────────────────────
+    const gestureEnabled = {
+      fist: true, palm: true, point: true,
+      pinch: true, peace: true, void: true, shrine: true,
+    };
+
+    // ─── Config ───────────────────────────────────────────────────────────
+    const cfg = {
+      count: 10000, size: 0.022,
+      glowEnabled: false, glowOpacity: 0.18, glowSize: 0.09,
+      damp: 0.87, rotSpeed: 0.0018, transSpeed: 0.03,
+      confirmFrames: 2, voidThreshold: 0.25,
+    };
+
+    // ─── Particles ────────────────────────────────────────────────────────
+    const MAX = 100000;
+    const positions  = new Float32Array(MAX * 3);
+    const velocities = new Float32Array(MAX * 3);
+    const origins    = new Float32Array(MAX * 3);
+    const colors     = new Float32Array(MAX * 3);
+
+    for (let i = 0; i < MAX; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi   = Math.acos(2 * Math.random() - 1);
+      const r     = 1.6 + Math.random() * 1.6;
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+      origins[i*3]=positions[i*3]=x;
+      origins[i*3+1]=positions[i*3+1]=y;
+      origins[i*3+2]=positions[i*3+2]=z;
+      colors[i*3]=colors[i*3+1]=colors[i*3+2]=1;
+    }
+
+    // ─── Shrine shape targets ─────────────────────────────────────────────
+    // Each particle gets a pre-assigned target on the shrine silhouette.
+    // Sections are weighted to match the torii / shrine structure.
+    const shrineTargets = new Float32Array(MAX * 3);
+
+    (function buildShrineTargets() {
+      const R = Math.random.bind(Math);
+      const J = (v, s) => v + (R()-0.5)*s; // jitter helper
+
+      // X scaled ×1.4 vs height so pillar opening is square (4.2 wide × 4.2 tall)
+      // Z depth kept at ±0.9 so structure has real 3D thickness
+      const sections = [
+        [0.09, t => { const x=(t*2-1)*4.1; return [x, J(2.3+0.06*(x/4.1)**2,0.1),  J( 0.45,0.15)]; }], // roof front
+        [0.06, t => { const x=(t*2-1)*4.1; return [x, J(2.1+0.06*(x/4.1)**2,0.1),  J(-0.45,0.15)]; }], // roof back
+        [0.05, t => { const x=(t*2-1)*4.1; const z=(R()-0.5)*0.9; return [x, J(2.2+0.06*(x/4.1)**2,0.12), z]; }], // roof depth fill
+        [0.05, t => { const x=-4.1-t*1.1;  return [x, J(2.3+t*1.2,0.1), J( 0.35,0.18)]; }], // left wing front
+        [0.05, t => { const x= 4.1+t*1.1;  return [x, J(2.3+t*1.2,0.1), J( 0.35,0.18)]; }], // right wing front
+        [0.03, t => { const x=-4.1-t*1.1;  return [x, J(2.1+t*1.0,0.1), J(-0.35,0.18)]; }], // left wing back
+        [0.03, t => { const x= 4.1+t*1.1;  return [x, J(2.1+t*1.0,0.1), J(-0.35,0.18)]; }], // right wing back
+        [0.08, t => { return [J(-2.1,0.12), -2.0+t*4.2, J( 0.45,0.1)]; }], // front-left pillar
+        [0.08, t => { return [J( 2.1,0.12), -2.0+t*4.2, J( 0.45,0.1)]; }], // front-right pillar
+        [0.05, t => { return [J(-2.1,0.12), -2.0+t*4.2, J(-0.45,0.1)]; }], // back-left pillar
+        [0.05, t => { return [J( 2.1,0.12), -2.0+t*4.2, J(-0.45,0.1)]; }], // back-right pillar
+        [0.05, t => { const z=(R()-0.5)*0.9; return [J(-2.1,0.15), -2.0+t*4.2, z]; }], // left side wall
+        [0.05, t => { const z=(R()-0.5)*0.9; return [J( 2.1,0.15), -2.0+t*4.2, z]; }], // right side wall
+        [0.05, t => { const x=(t*2-1)*2.9; return [x, J(0.4,0.1), J( 0.45,0.1)]; }], // crossbeam front
+        [0.03, t => { const x=(t*2-1)*2.9; return [x, J(0.4,0.1), J(-0.45,0.1)]; }], // crossbeam back
+        [0.06, t => { const x=(t*2-1)*2.1; return [x, J(1.55+0.06*(x/2.1)**2,0.1), (R()-0.5)*0.9]; }], // 2nd tier roof
+        [0.03, t => { return [J(-1.4,0.1), 0.4+t*1.1, J( 0.35,0.1)]; }], // inner-left pillar
+        [0.03, t => { return [J( 1.4,0.1), 0.4+t*1.1, J( 0.35,0.1)]; }], // inner-right pillar
+        [0.05, t => { const x=(t*2-1)*3.6; return [x, J(-2.0,0.1), (R()-0.5)*0.9]; }], // base (3D)
+      ];
+
+      const total = sections.reduce((s,[w])=>s+w, 0);
+      let idx = 0;
+      for (const [w, fn] of sections) {
+        const n = Math.round(MAX * w / total);
+        for (let p = 0; p < n && idx < MAX; p++, idx++) {
+          const [x,y,z] = fn(p/n);
+          shrineTargets[idx*3]=x; shrineTargets[idx*3+1]=y; shrineTargets[idx*3+2]=z;
+        }
+      }
+      while (idx < MAX) {
+        const [,fn] = sections[Math.floor(R()*sections.length)];
+        const [x,y,z] = fn(R());
+        shrineTargets[idx*3]=x; shrineTargets[idx*3+1]=y; shrineTargets[idx*3+2]=z;
+        idx++;
+      }
+
+      // Fisher-Yates shuffle so any particle subset shows all shrine sections
+      for (let i = MAX-1; i > 0; i--) {
+        const j = Math.floor(R()*(i+1));
+        const ti=i*3, tj=j*3;
+        let tmp;
+        tmp=shrineTargets[ti];   shrineTargets[ti]  =shrineTargets[tj];   shrineTargets[tj]  =tmp;
+        tmp=shrineTargets[ti+1]; shrineTargets[ti+1]=shrineTargets[tj+1]; shrineTargets[tj+1]=tmp;
+        tmp=shrineTargets[ti+2]; shrineTargets[ti+2]=shrineTargets[tj+2]; shrineTargets[tj+2]=tmp;
+      }
+    })();
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
+    geo.setDrawRange(0, cfg.count);
+
+    const coreMat = new THREE.PointsMaterial({
+      size: cfg.size, vertexColors: true, transparent: true, opacity: 1.0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const glowMat = new THREE.PointsMaterial({
+      size: cfg.glowSize, vertexColors: true, transparent: true, opacity: cfg.glowOpacity,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+
+    const coreMesh = new THREE.Points(geo, coreMat);
+    const glowMesh = new THREE.Points(geo, glowMat);
+    glowMesh.visible = false;
+    scene.add(glowMesh);
+    scene.add(coreMesh);
+
+    // ─── State — two hands ────────────────────────────────────────────────
+    // gestures[0] = left hand, gestures[1] = right hand
+    const gestures      = ['none', 'none'];
+    const transProgs    = [0, 0];         // per-hand transition progress
+    const framesMissing = [0, 0];         // consecutive frames each hand was undetected
+    const MISSING_GRACE = 10;             // grace frames before hand is considered gone
+    const pending    = [
+      { gesture: 'none', count: 0 },
+      { gesture: 'none', count: 0 },
+    ];
+
+    const colorA = new THREE.Color(0xffffff);  // hand 0 current color
+    const colorB = new THREE.Color(0xffffff);  // hand 1 current color
+    const targetA = new THREE.Color(0xffffff);
+    const targetB = new THREE.Color(0xffffff);
+    const blended  = new THREE.Color();
+
+    let time = 0;
+
+    // ─── Force helper ─────────────────────────────────────────────────────
+    // Returns how many hands currently have an active (non-idle) gesture
+    function activeGestureCount() {
+      return (gestures[0] !== 'none' ? 1 : 0) + (gestures[1] !== 'none' ? 1 : 0);
+    }
+
+    // Apply force for one gesture to one particle. Returns whether gesture was handled.
+    function applyGestureForce(g, tp, gp, ix, iy, iz, px, py, pz, dist, scale) {
+      if (gp <= 0 && tp <= 0) return;
+
+      if (tp > 0) {
+        velocities[ix] += (origins[ix]-px) * 0.08 * tp * scale;
+        velocities[iy] += (origins[iy]-py) * 0.08 * tp * scale;
+        velocities[iz] += (origins[iz]-pz) * 0.08 * tp * scale;
+      }
+
+      if (gp <= 0) return;
+
+      if (g === 'fist') {
+        const pull = 0.07 + 0.02 * Math.sin(time * 4);
+        velocities[ix] += (-px * pull - py * 0.04) * gp * scale;
+        velocities[iy] += (-py * pull + px * 0.04) * gp * scale;
+        velocities[iz] += (-pz * pull) * gp * scale;
+
+      } else if (g === 'palm') {
+        const force = Math.min(2.5 / (dist*dist + 0.2), 0.6);
+        velocities[ix] += (px/dist) * (force*0.09 + 0.005) * gp * scale;
+        velocities[iy] += (py/dist) * (force*0.09 + 0.005) * gp * scale;
+        velocities[iz] += (pz/dist) * (force*0.09 + 0.005) * gp * scale;
+
+      } else if (g === 'point') {
+        velocities[ix] += -px * 0.09 * gp * scale;
+        velocities[iz] += -pz * 0.09 * gp * scale;
+        velocities[iy] += (0.1 + Math.random() * 0.05) * gp * scale;
+
+      } else if (g === 'pinch') {
+        const pull = 0.18 / (dist*dist + 0.05);
+        velocities[ix] += (-px * pull - py * 0.1) * gp * scale;
+        velocities[iy] += (-py * pull + px * 0.1) * gp * scale;
+        velocities[iz] += (-pz * pull) * gp * scale;
+
+      } else if (g === 'peace') {
+        const side = origins[ix] >= 0 ? 1 : -1;
+        // Push outward but spring back to origin X — keeps particles contained
+        velocities[ix] += side * 0.04 * gp * scale;
+        velocities[ix] += (origins[ix] - px) * 0.03 * gp * scale;
+        velocities[iy] += Math.sin(time*3.0 + dist) * 0.04 * gp * scale;
+        velocities[iz] += Math.cos(time*2.0 + px)   * 0.02 * gp * scale;
+
+      } else if (g === 'void') {
+        const sphereR = 2.1, dr = dist - sphereR;
+        velocities[ix] += (-(px/dist)*dr*0.055 - py*0.018) * gp * scale;
+        velocities[iy] += (-(py/dist)*dr*0.055 + px*0.018 - pz*0.009) * gp * scale;
+        velocities[iz] += (-(pz/dist)*dr*0.055 + py*0.009) * gp * scale;
+
+      } else if (g === 'shrine') {
+        // Malevolent Shrine — attract each particle to its pre-assigned shrine target
+        const tx = shrineTargets[ix], ty = shrineTargets[iy], tz = shrineTargets[iz];
+        velocities[ix] += (tx - px) * 0.1 * gp * scale;
+        velocities[iy] += (ty - py) * 0.1 * gp * scale;
+        velocities[iz] += (tz - pz) * 0.1 * gp * scale;
+        // Crackling turbulence keeps the shape alive and menacing
+        velocities[ix] += (Math.random() - 0.5) * 0.055 * gp * scale;
+        velocities[iy] += (Math.random() - 0.5) * 0.055 * gp * scale;
+        velocities[iz] += (Math.random() - 0.5) * 0.025 * gp * scale;
+
+      } else {
+        // idle
+        velocities[ix] += (origins[ix]-px) * 0.025 * scale;
+        velocities[iy] += (origins[iy]-py) * 0.025 * scale;
+        velocities[iz] += (origins[iz]-pz) * 0.025 * scale;
+      }
+    }
+
+    // ─── Animation ────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+      time += 0.016;
+
+      for (let h = 0; h < 2; h++) {
+        if (transProgs[h] > 0) transProgs[h] = Math.max(0, transProgs[h] - cfg.transSpeed);
+      }
+
+      const pos = geo.attributes.position.array;
+      const col = geo.attributes.color.array;
+      const N   = cfg.count;
+
+      // Half power per hand only when both hands have active gestures
+      const scale = activeGestureCount() >= 2 ? 0.5 : 1.0;
+
+      for (let i = 0; i < N; i++) {
+        const ix=i*3, iy=ix+1, iz=ix+2;
+        const px=pos[ix], py=pos[iy], pz=pos[iz];
+        const dist = Math.sqrt(px*px + py*py + pz*pz) || 0.001;
+
+        // Active = has a gesture OR is still transitioning out
+        const h0active = gestures[0] !== 'none' || transProgs[0] > 0;
+        const h1active = gestures[1] !== 'none' || transProgs[1] > 0;
+
+        if (h0active) applyGestureForce(gestures[0], transProgs[0], 1-transProgs[0], ix,iy,iz, px,py,pz, dist, scale);
+        if (h1active) applyGestureForce(gestures[1], transProgs[1], 1-transProgs[1], ix,iy,iz, px,py,pz, dist, scale);
+
+        // Only passive idle return when both hands are fully inactive
+        if (!h0active && !h1active) {
+          velocities[ix] += (origins[ix]-px) * 0.025;
+          velocities[iy] += (origins[iy]-py) * 0.025;
+          velocities[iz] += (origins[iz]-pz) * 0.025;
+        }
+
+        // Beam wrapping for 'point' gesture (either hand)
+        if (gestures[0]==='point' || gestures[1]==='point') {
+          if (pos[iy] > 5.5) {
+            pos[iy] = -3.5 - Math.random() * 1.5;
+            pos[ix] = (Math.random()-0.5) * 0.4;
+            pos[iz] = (Math.random()-0.5) * 0.4;
+            velocities[ix]=0; velocities[iy]=0; velocities[iz]=0;
+          }
+        }
+
+        const dampY = (gestures[0]==='point' || gestures[1]==='point') ? 0.95 : cfg.damp;
+        velocities[ix] *= cfg.damp;
+        velocities[iy] *= dampY;
+        velocities[iz] *= cfg.damp;
+
+        pos[ix] += velocities[ix];
+        pos[iy] += velocities[iy];
+        pos[iz] += velocities[iz];
+
+        // Vertex color — blend both hand colors, brighten by speed
+        const speed = Math.sqrt(velocities[ix]**2 + velocities[iy]**2 + velocities[iz]**2);
+        const b     = Math.min(1.0, 0.35 + speed * 12);
+        blended.copy(colorA).lerp(colorB, 0.5);
+        col[ix] = blended.r * b;
+        col[iy] = blended.g * b;
+        col[iz] = blended.b * b;
+      }
+
+      // Update target colors per hand
+      targetA.set(gestureColor3(gestures[0]));
+      targetB.set(gestureColor3(gestures[1]));
+      colorA.lerp(targetA, 0.045);
+      colorB.lerp(targetB, 0.045);
+
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.color.needsUpdate    = true;
+
+      const anyPoint  = gestures[0]==='point' || gestures[1]==='point';
+      const anyShrine = gestures[0]==='shrine' || gestures[1]==='shrine';
+      const TILT_MAX  = 0.26; // ±15 degrees in radians
+
+      if (anyShrine) {
+        // Shrine: horizontal rotation only, vertical tilt gently clamped to ±15°
+        coreMesh.rotation.y += cfg.rotSpeed;
+        coreMesh.rotation.x *= 0.94; // dampen tilt toward upright
+        coreMesh.rotation.x = Math.max(-TILT_MAX, Math.min(TILT_MAX, coreMesh.rotation.x));
+      } else if (!anyPoint) {
+        coreMesh.rotation.y += cfg.rotSpeed;
+        coreMesh.rotation.x += cfg.rotSpeed * 0.35;
+      }
+      glowMesh.rotation.copy(coreMesh.rotation);
+
+      renderer.render(scene, cam3d);
+    }
+
+    animate();
+
+    // ─── Gesture colors as hex numbers ────────────────────────────────────
+    function gestureColor3(g) {
+      const map = { fist:0xff1a00, palm:0x00ddff, point:0xffcc00, pinch:0xcc00ff, peace:0x00ff88, void:0x3366ff, shrine:0xff2200, none:0xffffff };
+      return map[g] ?? 0xffffff;
+    }
+
+    // ─── Gesture Detection ────────────────────────────────────────────────
+    function dist2D(a, b) { return Math.hypot(a.x-b.x, a.y-b.y); }
+    function fingerExtended(lm, t, p) { return lm[t].y < lm[p].y; }
+
+    function classify(lm) {
+      const indexUp  = fingerExtended(lm, 8,  6);
+      const middleUp = fingerExtended(lm, 12, 10);
+      const ringUp   = fingerExtended(lm, 16, 14);
+      const pinkyUp  = fingerExtended(lm, 20, 18);
+      const upCount  = [indexUp,middleUp,ringUp,pinkyUp].filter(Boolean).length;
+      const thumbD   = dist2D(lm[4], lm[8]);
+      const handDx   = Math.abs(lm[9].x - lm[0].x);
+      const handDy   = Math.abs(lm[9].y - lm[0].y);
+      const sideways = handDx > handDy * cfg.voidThreshold;
+
+      if (gestureEnabled.void   && sideways && upCount <= 1)                                return 'void';
+      if (gestureEnabled.pinch  && thumbD < 0.07 && !middleUp && !ringUp && !pinkyUp)       return 'pinch';
+      if (gestureEnabled.peace  && !sideways && indexUp && middleUp && !ringUp && !pinkyUp) return 'peace';
+      if (gestureEnabled.point  && indexUp && !middleUp && !ringUp && !pinkyUp)             return 'point';
+      if (gestureEnabled.palm   && upCount >= 3)                                            return 'palm';
+      if (gestureEnabled.fist   && upCount === 0)                                           return 'fist';
+      return 'none';
+    }
+
+    // ─── MediaPipe ────────────────────────────────────────────────────────
+    const videoEl    = document.getElementById('webcam');
+    const labelLeft  = document.getElementById('label-left');
+    const labelRight = document.getElementById('label-right');
+    const labelShrine = document.getElementById('label-shrine');
+
+    // Fade in text labels only after all fonts are loaded — prevents FOUT
+    document.fonts.ready.then(() => {
+      labelLeft.style.opacity  = '1';
+      labelRight.style.opacity = '1';
+    });
+    const overlayEl  = document.getElementById('landmark-overlay');
+    const overlayCtx = overlayEl.getContext('2d');
+
+    const CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+      [0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],
+      [0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17],
+    ];
+
+    videoEl.addEventListener('loadedmetadata', () => {
+      overlayEl.width  = videoEl.videoWidth;
+      overlayEl.height = videoEl.videoHeight;
+      overlayEl.style.height = (220 * videoEl.videoHeight / videoEl.videoWidth) + 'px';
+    });
+
+    const LABELS = {
+      fist:'✊ FIST', palm:'🖐 PALM', point:'☝️ POINT',
+      pinch:'🤏 PINCH', peace:'✌️ PEACE', void:'🌌 VOID',
+      shrine:'🏯 SHRINE', none:'—',
+    };
+    const COLORS = {
+      fist:'#ff4422', palm:'#00ddff', point:'#ffcc00',
+      pinch:'#cc44ff', peace:'#00ff88', void:'#3366ff',
+      shrine:'#ff2200', none:'rgba(255,255,255,0.75)',
+    };
+
+    // Hand colors for landmark overlay (hand 0 = warm, hand 1 = cool)
+    const HAND_COLORS = ['#ff9944', '#44aaff'];
+
+    // ── Cinematic mode ────────────────────────────────────────────────────
+    const GESTURE_FONTS = {
+      fist:   "'Bebas Neue', sans-serif",
+      palm:   "'Cinzel', serif",
+      point:  "'Orbitron', sans-serif",
+      pinch:  "'Space Mono', monospace",
+      peace:  "'Josefin Sans', sans-serif",
+      void:   "'Cinzel Decorative', serif",
+      shrine: "'Cinzel Decorative', serif",
+    };
+    const GESTURE_TEXT = {
+      fist: 'FIST', palm: 'PALM', point: 'POINT',
+      pinch: 'PINCH', peace: 'PEACE', void: 'VOID',
+      shrine: 'Malevolent Shrine',
+    };
+
+    let cinematicMode = false;
+    const cinematicEl = document.getElementById('cinematic-label');
+    const UI_HIDE = ['hint','settings-toggle','label-left','label-right','label-shrine'];
+
+    function updateCinematicLabel() {
+      if (!cinematicMode) return;
+      const g0 = gestures[0], g1 = gestures[1];
+      const isShrine = g0 === 'shrine' || g1 === 'shrine';
+      let html = '';
+
+      if (isShrine) {
+        html = `<span style="font-family:${GESTURE_FONTS.shrine};color:${COLORS.shrine}">${GESTURE_TEXT.shrine}</span>`;
+      } else {
+        const parts = [g0, g1].filter(g => g !== 'none');
+        if (parts.length === 1) {
+          const g = parts[0];
+          html = `<span style="font-family:${GESTURE_FONTS[g]};color:${COLORS[g]}">${GESTURE_TEXT[g]}</span>`;
+        } else if (parts.length === 2) {
+          html = `<span style="font-family:${GESTURE_FONTS[parts[0]]};color:${COLORS[parts[0]]}">${GESTURE_TEXT[parts[0]]}</span>` +
+                 `<span class="cin-plus"> + </span>` +
+                 `<span style="font-family:${GESTURE_FONTS[parts[1]]};color:${COLORS[parts[1]]}">${GESTURE_TEXT[parts[1]]}</span>`;
+        }
+      }
+      cinematicEl.innerHTML = html;
+    }
+
+    function setCinematic(on) {
+      cinematicMode = on;
+      UI_HIDE.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.visibility = on ? 'hidden' : 'visible';
+      });
+      cinematicEl.style.display = on ? 'block' : 'none';
+      if (on) { panel.classList.remove('open'); updateCinematicLabel(); }
+      else     { cinematicEl.innerHTML = ''; }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'c' || e.key === 'C') {
+        const cb = document.getElementById('cb-cinematic');
+        cb.checked = !cb.checked;
+        setCinematic(cb.checked);
+      }
+    });
+
+    const hands = new Hands({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+    });
+    hands.setOptions({
+      maxNumHands: 2, modelComplexity: 1,
+      minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
+    });
+
+    // Returns true if this hand is making the shrine shape:
+    // middle + ring extended, index + pinky curled
+    function isShrineHand(lm) {
+      if (!lm) return false;
+      // Middle and ring extended, index curled — that's the core of this pose.
+      // Pinky intentionally excluded: in the real gesture it can read as extended
+      // depending on how far the hands have come together.
+      return  fingerExtended(lm, 12, 10) &&  // middle up
+              fingerExtended(lm, 16, 14) &&  // ring up
+             !fingerExtended(lm,  8,  6);    // index down
+    }
+
+    let shrineLocked    = false;  // true once shrine is entered, stays until explicit exit
+    const lastKnownLm   = [null, null]; // last good landmarks per hand (survives dropout)
+    const SHRINE_ENTRY  = 0.28;   // hands must be THIS close (and approaching) to enter
+    const SHRINE_EXIT   = 0.50;   // hands must separate past THIS distance to exit
+
+    hands.onResults(results => {
+      overlayCtx.clearRect(0, 0, overlayEl.width, overlayEl.height);
+
+      const lmList      = results.multiHandLandmarks || [];
+      const handedness  = results.multiHandedness    || [];
+      const W = overlayEl.width, H = overlayEl.height;
+
+      // ── Build slot map ─────────────────────────────────────────────────
+      const slotMap       = {};
+      const slotLandmarks = [null, null];
+      for (let h = 0; h < lmList.length; h++) {
+        const label = handedness[h]?.label ?? (h === 0 ? 'Left' : 'Right');
+        const slot  = label === 'Left' ? 1 : 0;
+        slotMap[slot]       = h;
+        slotLandmarks[slot] = lmList[h];
+      }
+
+      // ── Always draw landmarks for every detected hand ──────────────────
+      for (let slot = 0; slot < 2; slot++) {
+        const lms = slotLandmarks[slot];
+        if (!lms) continue;
+        const hColor = HAND_COLORS[slot];
+
+        overlayCtx.strokeStyle = 'rgba(255,255,255,0.22)';
+        overlayCtx.lineWidth   = 1.5;
+        for (const [a, b] of CONNECTIONS) {
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(lms[a].x*W, lms[a].y*H);
+          overlayCtx.lineTo(lms[b].x*W, lms[b].y*H);
+          overlayCtx.stroke();
+        }
+        for (let i = 0; i < lms.length; i++) {
+          const x=lms[i].x*W, y=lms[i].y*H;
+          const tip=[4,8,12,16,20].includes(i);
+          if (tip) {
+            overlayCtx.beginPath();
+            overlayCtx.arc(x, y, 9, 0, Math.PI*2);
+            overlayCtx.fillStyle = hColor + '44';
+            overlayCtx.fill();
+          }
+          overlayCtx.beginPath();
+          overlayCtx.arc(x, y, tip?5:3, 0, Math.PI*2);
+          overlayCtx.fillStyle = tip ? hColor : 'rgba(255,255,255,0.7)';
+          overlayCtx.fill();
+        }
+      }
+
+      // ── Cache last known landmarks (survives tracking dropout) ───────────
+      for (let s = 0; s < 2; s++) {
+        if (slotLandmarks[s]) lastKnownLm[s] = slotLandmarks[s];
+      }
+
+      // ── Shrine lock-on logic ───────────────────────────────────────────
+      if (gestureEnabled.shrine) {
+        const lm0 = slotLandmarks[0], lm1 = slotLandmarks[1];
+        const k0  = lastKnownLm[0],   k1  = lastKnownLm[1];
+
+        if (!shrineLocked) {
+          // Entry: both hands visible, correct shape, approaching (not yet overlapping)
+          if (lm0 && lm1 && isShrineHand(lm0) && isShrineHand(lm1) &&
+              dist2D(lm0[9], lm1[9]) < SHRINE_ENTRY) {
+            shrineLocked = true;
+          }
+        } else {
+          // Exit: ONLY when last known positions show hands clearly separated.
+          // Shape changes and tracking drops are ignored — distance is the only trigger.
+          const handsFar = k0 && k1 && dist2D(k0[9], k1[9]) > SHRINE_EXIT;
+          if (handsFar) shrineLocked = false;
+        }
+      } else {
+        shrineLocked = false; // disabled via toggle
+      }
+
+      if (shrineLocked) {
+        if (gestures[0] !== 'shrine') { transProgs[0] = 1.0; gestures[0] = 'shrine'; updateCinematicLabel(); }
+        if (gestures[1] !== 'shrine') { transProgs[1] = 1.0; gestures[1] = 'shrine'; updateCinematicLabel(); }
+        if (!cinematicMode) {
+          labelLeft.style.visibility  = 'hidden';
+          labelRight.style.visibility = 'hidden';
+          labelShrine.style.display   = 'block';
+        }
+        return; // skip normal classification while shrine is held
+      }
+
+      // Shrine just released — clean up
+      labelShrine.style.display   = 'none';
+      if (!cinematicMode) {
+        labelLeft.style.visibility  = 'visible';
+        labelRight.style.visibility = 'visible';
+      }
+      if (gestures[0] === 'shrine' || gestures[1] === 'shrine') {
+        for (let s = 0; s < 2; s++) {
+          transProgs[s] = 1.0; gestures[s] = 'none';
+          pending[s].gesture = 'none'; pending[s].count = 0;
+          framesMissing[s] = 0;
+        }
+        labelLeft.textContent  = '—'; labelLeft.style.color  = COLORS.none;
+        labelRight.textContent = '—'; labelRight.style.color = COLORS.none;
+        updateCinematicLabel();
+      }
+
+      // ── Normal per-hand classification ─────────────────────────────────
+      for (let slot = 0; slot < 2; slot++) {
+        const lms = slotLandmarks[slot];
+
+        if (!lms) {
+          // Hand not seen this frame — increment missing counter
+          framesMissing[slot]++;
+          // Only start moving toward 'none' after grace period expires
+          if (framesMissing[slot] > MISSING_GRACE) {
+            if (pending[slot].gesture === 'none') { pending[slot].count++; }
+            else { pending[slot].gesture = 'none'; pending[slot].count = 1; }
+          }
+        } else {
+          // Hand visible — reset missing counter and classify normally
+          framesMissing[slot] = 0;
+          const detected = classify(lms);
+          if (detected === pending[slot].gesture) { pending[slot].count++; }
+          else { pending[slot].gesture = detected; pending[slot].count = 1; }
+        }
+
+        if (pending[slot].count >= cfg.confirmFrames && pending[slot].gesture !== gestures[slot]) {
+          transProgs[slot] = 1.0;
+          gestures[slot]   = pending[slot].gesture;
+          const g = gestures[slot];
+          if (slot === 0) { labelLeft.textContent  = LABELS[g]; labelLeft.style.color  = COLORS[g]; }
+          else            { labelRight.textContent = LABELS[g]; labelRight.style.color = COLORS[g]; }
+          if (g === 'point') { coreMesh.rotation.set(0,0,0); glowMesh.rotation.set(0,0,0); }
+          updateCinematicLabel();
+        }
+      }
+
+    });
+
+    const mpCam = new Camera(videoEl, {
+      onFrame: async () => { await hands.send({ image: videoEl }); },
+      width: 640, height: 480,
+    });
+    mpCam.start().catch(err => console.error(err));
+
+    // ─── Settings Panel ───────────────────────────────────────────────────
+    const panel = document.getElementById('settings-panel');
+    document.getElementById('settings-toggle').addEventListener('click', () => panel.classList.toggle('open'));
+
+    function applyConfig(key, v) {
+      if (key==='count')       geo.setDrawRange(0, Math.round(v));
+      if (key==='size')        coreMat.size = v;
+      if (key==='glowOpacity') glowMat.opacity = v;
+      if (key==='glowSize')    glowMat.size = v;
+    }
+
+    function bindSlider(id, valId, key, fmt) {
+      const sl  = document.getElementById(id);
+      const inp = document.getElementById(valId);
+
+      const apply = (v) => {
+        cfg[key] = v;
+        inp.value = fmt ? fmt(v) : v;
+        sl.value  = v;
+        applyConfig(key, v);
+      };
+
+      // Slider → input
+      sl.addEventListener('input', () => apply(parseFloat(sl.value)));
+
+      // Typed input → slider (on blur or Enter)
+      inp.addEventListener('change', () => {
+        let v = parseFloat(inp.value);
+        if (isNaN(v)) return;
+        const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
+        if (!isNaN(mn)) v = Math.max(mn, v);
+        if (!isNaN(mx)) v = Math.min(mx, v);
+        apply(v);
+      });
+    }
+
+    bindSlider('sl-count',        'val-count',        'count',         v => Math.round(v));
+    bindSlider('sl-size',         'val-size',         'size',          v => v.toFixed(3));
+    bindSlider('sl-glow-opacity', 'val-glow-opacity', 'glowOpacity',   v => v.toFixed(2));
+    bindSlider('sl-glow-size',    'val-glow-size',    'glowSize',      v => v.toFixed(3));
+    bindSlider('sl-damp',         'val-damp',         'damp',          v => v.toFixed(2));
+    bindSlider('sl-rot',          'val-rot',          'rotSpeed',      v => v.toFixed(4));
+    bindSlider('sl-trans',        'val-trans',        'transSpeed',    v => v.toFixed(3));
+    bindSlider('sl-frames',       'val-frames',       'confirmFrames', v => Math.round(v));
+    bindSlider('sl-void',         'val-void',         'voidThreshold', v => v.toFixed(2));
+
+    document.getElementById('cb-glow').addEventListener('change', e => {
+      cfg.glowEnabled = e.target.checked;
+      glowMesh.visible = cfg.glowEnabled;
+      document.getElementById('sl-glow-opacity').disabled = !cfg.glowEnabled;
+      document.getElementById('sl-glow-size').disabled    = !cfg.glowEnabled;
+    });
+    document.getElementById('cb-cinematic').addEventListener('change', e => setCinematic(e.target.checked));
+    document.getElementById('cb-camera').addEventListener('change',    e => { videoEl.style.opacity    = e.target.checked ? '0.75' : '0'; });
+    document.getElementById('cb-landmarks').addEventListener('change', e => { overlayEl.style.opacity  = e.target.checked ? '1' : '0'; });
+    document.getElementById('cb-hint').addEventListener('change',      e => { document.getElementById('hint').style.opacity = e.target.checked ? '1' : '0'; });
+
+    // Gesture toggles
+    for (const key of ['fist','palm','point','pinch','peace','void','shrine']) {
+      document.getElementById(`cb-g-${key}`).addEventListener('change', e => {
+        gestureEnabled[key] = e.target.checked;
+      });
+    }
+
+  </script>
+</body>
+</html>
