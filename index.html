@@ -378,6 +378,9 @@
     };
     let holdTimer    = 0;
     let holdGesture  = 'none';
+    // ~1% of particles are permanently excluded from flash shapes
+    const flashExclude = new Uint8Array(MAX);
+    for (let i = 0; i < MAX; i++) flashExclude[i] = Math.random() < 0.01 ? 1 : 0;
 
     function buildFlashTargets(gesture) {
       const Rnd = Math.random.bind(Math);
@@ -388,23 +391,21 @@
       if (gesture === 'yolo') {
         // Sailboat ⛵ — clean classic profile: hull arc + mast + large mainsail + jib
         sections = [
-          // Hull arc (wide parabola bottom)
-          [0.14, t => { const x=(t*2-1)*2.4; return [J(x,0.08), J(-1.6+0.28*(x/2.4)**2,0.07), J(0,0.18)]; }],
-          // Hull sides (straight walls up to deck)
-          [0.05, t => [J(-2.4,0.06), J(-1.6+t*0.7,0.06), J(0,0.1)]],
-          [0.05, t => [J( 2.4,0.06), J(-1.6+t*0.7,0.06), J(0,0.1)]],
-          // Deck line
-          [0.07, t => [J(-2.4+t*4.8,0.07), J(-0.9,0.06), J(0,0.14)]],
-          // Mast (tall, prominent)
-          [0.07, t => [J(0,0.05), J(-0.9+t*3.9,0.05), J(0,0.08)]],
-          // Main sail — large right triangle: mast top → deck-right → deck-center
-          // (0, 3.0), (0, -0.9), (2.6, -0.9) — fill with random points inside triangle
-          [0.38, t => { const r1=Rnd(),r2=Rnd(); const u=1-Math.sqrt(r1), v=Math.sqrt(r1)*(1-r2), w=Math.sqrt(r1)*r2; return [J(u*0+v*0+w*2.6,0.07), J(u*3.0+v*-0.9+w*-0.9,0.07), J(0,0.13)]; }],
-          // Main sail edges
-          [0.06, t => [J(0,0.05), J(-0.9+t*3.9,0.05), J(0,0.1)]], // leading edge up mast
-          [0.06, t => [J(t*2.6,0.06), J(-0.9,0.05), J(0,0.1)]], // boom along deck
-          [0.08, t => { const x=t*2.6, y=-0.9+(3.0-(-0.9))*(1-t); return [J(x,0.06), J(y,0.06), J(0,0.12)]; }], // hypotenuse
-          // Jib (front sail) — small triangle: mast top, mast-deck, bow
+          // Hull arc — heavy (most particles here)
+          [0.22, t => { const x=(t*2-1)*2.4; return [J(x,0.07), J(-1.6+0.28*(x/2.4)**2,0.06), J(0,0.18)]; }],
+          // Hull sides
+          [0.07, t => [J(-2.4,0.05), J(-1.6+t*0.7,0.05), J(0,0.1)]],
+          [0.07, t => [J( 2.4,0.05), J(-1.6+t*0.7,0.05), J(0,0.1)]],
+          // Deck line — solid
+          [0.09, t => [J(-2.4+t*4.8,0.06), J(-0.9,0.05), J(0,0.13)]],
+          // Mast — very heavy, dense line
+          [0.20, t => [J(0,0.04), J(-0.9+t*3.9,0.04), J(0,0.07)]],
+          // Main sail fill — sparse (just enough to define shape)
+          [0.14, t => { const r1=Rnd(),r2=Rnd(); const u=1-Math.sqrt(r1), v=Math.sqrt(r1)*(1-r2), w=Math.sqrt(r1)*r2; return [J(u*0+v*0+w*2.6,0.08), J(u*3.0+v*-0.9+w*-0.9,0.08), J(0,0.14)]; }],
+          // Sail edges (outline matters more than fill)
+          [0.07, t => { const x=t*2.6, y=-0.9+(3.0+0.9)*(1-t); return [J(x,0.05), J(y,0.05), J(0,0.11)]; }], // hypotenuse
+          [0.06, t => [J(t*2.6,0.05), J(-0.9,0.04), J(0,0.1)]], // boom
+          // Jib
           [0.04, t => { const r1=Rnd(),r2=Rnd(); const u=1-Math.sqrt(r1), v=Math.sqrt(r1)*(1-r2), w=Math.sqrt(r1)*r2; return [J(u*0+v*0+w*-2.4,0.07), J(u*2.2+v*-0.9+w*-1.0,0.07), J(0,0.13)]; }],
         ];
       } else if (gesture === 'prayer') {
@@ -690,7 +691,12 @@
           buildFlashTargets(dominant);
           flashState.active = true; flashState.gesture = dominant; flashState.frame = 0;
         }
-      } else { holdTimer = 0; holdGesture = 'none'; }
+      } else {
+        holdTimer = 0; holdGesture = 'none';
+        if (flashState.active) flashState.active = false; // drop gesture → kill flash
+      }
+      // Also cancel if gesture changes mid-flash
+      if (flashState.active && dominant !== flashState.gesture) flashState.active = false;
       if (flashState.active) {
         flashState.frame++;
         const totalF = flashState.formF + flashState.holdF + flashState.dissolveF;
@@ -747,8 +753,8 @@
           }
         }
 
-        // Flash shape attraction — smoothly pulls particles into symbol silhouette
-        if (flashProg > 0) {
+        // Flash shape attraction — ~1% of particles excluded and remain free
+        if (flashProg > 0 && !flashExclude[i]) {
           const fx=flashState.targets[ix], fy=flashState.targets[iy], fz=flashState.targets[iz];
           const str = 0.18 * flashProg;
           velocities[ix] += (fx-px)*str; velocities[iy] += (fy-py)*str; velocities[iz] += (fz-pz)*str;
@@ -785,11 +791,11 @@
       const anyShrine = gestures[0]==='shrine' || gestures[1]==='shrine';
       const TILT_MAX  = 0.26; // ±15 degrees in radians
 
-      // During flash: lerp mesh rotation toward facing camera (0,0,0)
-      if (flashProg > 0) {
-        const snap = 0.06 * flashProg;
-        coreMesh.rotation.x -= coreMesh.rotation.x * snap;
-        coreMesh.rotation.y -= coreMesh.rotation.y * snap;
+      // Lock rotation during form phase only; let it drift freely after
+      if (flashState.active && flashState.frame < flashState.formF) {
+        const snapStr = Math.min(0.18, 0.18 * flashState.frame / Math.max(1, flashState.formF * 0.3));
+        coreMesh.rotation.x -= coreMesh.rotation.x * snapStr;
+        coreMesh.rotation.y -= coreMesh.rotation.y * snapStr;
       }
 
       if (anyShrine) {
