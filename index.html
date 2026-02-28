@@ -473,30 +473,26 @@
         velocities[iz] += (Math.random() - 0.5) * 0.025 * gp * scale;
 
       } else if (g === 'prayer') {
-        // Prayer — particles gently ascend in a slow golden spiral/halo
-        const sphereR = 2.4, dr = dist - sphereR;
-        // Gentle lift toward halo ring + slow inward pull to ring radius
-        velocities[iy] += (0.025 + Math.sin(time*1.2 + dist*2) * 0.012) * gp * scale;
-        velocities[ix] += (-(px/dist)*dr*0.028 - py*0.008) * gp * scale;
-        velocities[iz] += (-(pz/dist)*dr*0.028 + py*0.008) * gp * scale;
-        // Very gentle slow rotation
-        velocities[ix] += (-pz * 0.012) * gp * scale;
-        velocities[iz] += ( px * 0.012) * gp * scale;
-        // Soft noise (much calmer than shrine)
-        velocities[ix] += (Math.random() - 0.5) * 0.012 * gp * scale;
-        velocities[iy] += (Math.random() - 0.5) * 0.008 * gp * scale;
-        velocities[iz] += (Math.random() - 0.5) * 0.012 * gp * scale;
+        // Prayer — gentle golden ascent; particles wrap back to bottom when they exit top
+        const sphereR = 2.0, dr = dist - sphereR;
+        velocities[iy] += (0.018 + Math.sin(time*1.2 + dist*2) * 0.008) * gp * scale;
+        velocities[ix] += (-(px/dist)*dr*0.022 - pz*0.008) * gp * scale;
+        velocities[iz] += (-(pz/dist)*dr*0.022 + px*0.008) * gp * scale;
+        velocities[ix] += (Math.random() - 0.5) * 0.008 * gp * scale;
+        velocities[iy] += (Math.random() - 0.5) * 0.005 * gp * scale;
+        velocities[iz] += (Math.random() - 0.5) * 0.008 * gp * scale;
 
       } else if (g === 'rude') {
-        // Rude — violent chaotic blast outward, angry pink/magenta
-        const force = 0.12 + 0.06 * Math.abs(Math.sin(time * 8));
-        velocities[ix] += (px/dist) * force * gp * scale;
-        velocities[iy] += (py/dist) * force * gp * scale;
-        velocities[iz] += (pz/dist) * force * gp * scale;
-        // High turbulence
-        velocities[ix] += (Math.random() - 0.5) * 0.18 * gp * scale;
-        velocities[iy] += (Math.random() - 0.5) * 0.18 * gp * scale;
-        velocities[iz] += (Math.random() - 0.5) * 0.18 * gp * scale;
+        // Rude — violent chaotic thrash; spring-back keeps particles on screen
+        const push  = 0.028 + 0.014 * Math.abs(Math.sin(time * 8));
+        const pull  = 0.022; // spring back toward origin — prevents escape
+        velocities[ix] += ((px/dist) * push + (origins[ix]-px) * pull) * gp * scale;
+        velocities[iy] += ((py/dist) * push + (origins[iy]-py) * pull) * gp * scale;
+        velocities[iz] += ((pz/dist) * push + (origins[iz]-pz) * pull) * gp * scale;
+        // Turbulence (toned down so particles don't run away)
+        velocities[ix] += (Math.random() - 0.5) * 0.07 * gp * scale;
+        velocities[iy] += (Math.random() - 0.5) * 0.07 * gp * scale;
+        velocities[iz] += (Math.random() - 0.5) * 0.07 * gp * scale;
 
       } else {
         // idle
@@ -548,6 +544,13 @@
             pos[ix] = (Math.random()-0.5) * 0.4;
             pos[iz] = (Math.random()-0.5) * 0.4;
             velocities[ix]=0; velocities[iy]=0; velocities[iz]=0;
+          }
+        }
+        // Prayer: wrap ascending particles back to below so they loop continuously
+        if (gestures[0]==='prayer' || gestures[1]==='prayer') {
+          if (pos[iy] > 4.5) {
+            pos[iy] = -2.5 - Math.random() * 1.0;
+            velocities[iy] = Math.random() * 0.02;
           }
         }
 
