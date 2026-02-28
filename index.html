@@ -369,6 +369,142 @@
       }
     })();
 
+    // ─── Flash shape system ───────────────────────────────────────────────────
+    // When a gesture is held long enough, particles briefly form a recognizable symbol
+    const flashState = {
+      active: false, gesture: null, frame: 0, duration: 110,
+      targets: new Float32Array(MAX * 3),
+    };
+    let holdTimer    = 0;
+    let holdGesture  = 'none';
+
+    function buildFlashTargets(gesture) {
+      const Rnd = Math.random.bind(Math);
+      const J   = (v, s) => v + (Rnd()-0.5)*s;
+      const T   = flashState.targets;
+      let sections;
+
+      if (gesture === 'yolo') {
+        // Sailboat ⛵
+        sections = [
+          [0.22, t => { const a=Math.PI*t; return [J(Math.cos(a)*2.0,0.1), J(-1.8+Math.sin(a)*0.35,0.1), J(0,0.2)]; }],
+          [0.06, t => [J(0,0.06), J(-1.4+t*2.3,0.06), J(0,0.08)]],
+          [0.42, t => { const r1=Rnd(),r2=Rnd(),sr=Math.sqrt(r1); const a=1-sr,b=sr*(1-r2),c=sr*r2; return [J(a*0+b*2.0+c*0,0.07), J(a*1.1+b*-0.8+c*-0.8,0.07), J(0,0.14)]; }],
+          [0.20, t => { const r1=Rnd(),r2=Rnd(),sr=Math.sqrt(r1); const a=1-sr,b=sr*(1-r2),c=sr*r2; return [J(a*0+b*-1.6+c*0,0.07), J(a*0.2+b*-0.8+c*-0.8,0.07), J(0,0.14)]; }],
+          [0.10, t => [J((t*2-1)*2.1,0.08), J(-1.8,0.07), J(0,0.18)]],
+        ];
+      } else if (gesture === 'prayer') {
+        // Pagoda / temple 🏛️
+        sections = [
+          [0.07, t => [J((t*2-1)*2.8,0.08), J(-2.1,0.07), J(0,0.18)]],
+          [0.05, t => [J(-1.6,0.06), J(-2.1+t*1.6,0.06), J(0,0.1)]],
+          [0.05, t => [J( 1.6,0.06), J(-2.1+t*1.6,0.06), J(0,0.1)]],
+          [0.10, t => { const x=(t*2-1)*2.6; return [J(x,0.08), J(-0.52+0.45*(x/2.6)**2,0.09), J(0,0.16)]; }],
+          [0.06, t => [J((t*2-1)*1.9,0.07), J(-0.52,0.07), J(0,0.15)]],
+          [0.04, t => [J(-1.0,0.06), J(-0.52+t*1.2,0.06), J(0,0.1)]],
+          [0.04, t => [J( 1.0,0.06), J(-0.52+t*1.2,0.06), J(0,0.1)]],
+          [0.09, t => { const x=(t*2-1)*1.8; return [J(x,0.07), J(0.68+0.44*(x/1.8)**2,0.08), J(0,0.14)]; }],
+          [0.06, t => [J((t*2-1)*1.0,0.06), J(0.68,0.06), J(0,0.12)]],
+          [0.08, t => { const x=(t*2-1)*1.0; return [J(x,0.06), J(1.85+0.6*(x/1.0)**2,0.07), J(0,0.12)]; }],
+          [0.05, t => [J(0,0.04), J(1.85+t*0.6,0.05), J(0,0.07)]],
+          [0.06, t => [J(-2.6+t*5.2,0.07), J(-2.1,0.07), J(0,0.15)]],
+          [0.06, t => [J(-1.6,0.07), J(-2.1+t*1.65,0.07), J(0,0.1)]],
+          [0.06, t => [J( 1.6,0.07), J(-2.1+t*1.65,0.07), J(0,0.1)]],
+        ];
+      } else if (gesture === 'void') {
+        // Two glowing eyes 👀
+        sections = [
+          [0.28, t => { const th=t*Math.PI*2; return [J(-1.7+Math.cos(th)*1.0,0.06), J(Math.sin(th)*0.65,0.06), J(0,0.18)]; }],
+          [0.28, t => { const th=t*Math.PI*2; return [J( 1.7+Math.cos(th)*1.0,0.06), J(Math.sin(th)*0.65,0.06), J(0,0.18)]; }],
+          [0.13, t => { const th=Rnd()*Math.PI*2, r=Rnd()*0.3; return [J(-1.7+Math.cos(th)*r,0.04), J(Math.sin(th)*r*0.9,0.04), J(0,0.1)]; }],
+          [0.13, t => { const th=Rnd()*Math.PI*2, r=Rnd()*0.3; return [J( 1.7+Math.cos(th)*r,0.04), J(Math.sin(th)*r*0.9,0.04), J(0,0.1)]; }],
+          [0.09, t => { const th=t*Math.PI*2; return [J(-1.7+Math.cos(th)*0.55,0.04), J(Math.sin(th)*0.36,0.04), J(0,0.1)]; }],
+          [0.09, t => { const th=t*Math.PI*2; return [J( 1.7+Math.cos(th)*0.55,0.04), J(Math.sin(th)*0.36,0.04), J(0,0.1)]; }],
+        ];
+      } else if (gesture === 'fist') {
+        // 5-pointed star ⭐
+        const pts5 = Array.from({length:10}, (_,k) => {
+          const r = k%2===0 ? 2.5 : 1.05;
+          const a = (k*36+90)*Math.PI/180;
+          return [Math.cos(a)*r, Math.sin(a)*r];
+        });
+        sections = [
+          [0.65, t => { const seg=Math.floor(t*10), st=(t*10)%1, i1=seg%10, i2=(seg+1)%10; return [J(pts5[i1][0]+(pts5[i2][0]-pts5[i1][0])*st, 0.07), J(pts5[i1][1]+(pts5[i2][1]-pts5[i1][1])*st, 0.07), J(0,0.18)]; }],
+          [0.35, t => { const r1=Rnd(),r2=Rnd(),seg=Math.floor(Rnd()*5),sr=Math.sqrt(r1); const a=pts5[seg*2],b=pts5[seg*2+1],c=pts5[(seg*2+2)%10]; const u=1-sr,v=sr*(1-r2),w=sr*r2; return [J(u*0+v*a[0]+w*b[0],0.08), J(u*0+v*a[1]+w*b[1],0.08), J(0,0.18)]; }],
+        ];
+      } else if (gesture === 'peace') {
+        // Peace symbol ☮
+        const Rc=2.3;
+        sections = [
+          [0.30, t => { const th=t*Math.PI*2; return [J(Math.cos(th)*Rc,0.06), J(Math.sin(th)*Rc,0.06), J(0,0.15)]; }],
+          [0.18, t => [J(0,0.05), J(-Rc+t*Rc*2,0.05), J(0,0.12)]],
+          [0.18, t => [J(-Rc*0.866*t,0.05), J(-Rc*0.5*t,0.05), J(0,0.12)]],
+          [0.18, t => [J( Rc*0.866*t,0.05), J(-Rc*0.5*t,0.05), J(0,0.12)]],
+          [0.16, t => { const th=Rnd()*Math.PI*2, r=Rnd()*0.5+Rc*0.7; return [J(Math.cos(th)*r,0.12), J(Math.sin(th)*r,0.12), J(0,0.2)]; }],
+        ];
+      } else if (gesture === 'pinch') {
+        // Inward spiral 🌀
+        sections = [
+          [0.65, t => { const th=t*4.5*Math.PI*2, r=(1-t)*2.6+0.05; return [J(Math.cos(th)*r,0.06), J(Math.sin(th)*r,0.06), J(0,0.15)]; }],
+          [0.35, t => { const th=t*3.0*Math.PI*2+0.5, r=(1-t)*2.0+0.05; return [J(Math.cos(th)*r,0.06), J(Math.sin(th)*r,0.06), J(0,0.15)]; }],
+        ];
+      } else if (gesture === 'point') {
+        // Upward arrow ↑
+        sections = [
+          [0.28, t => [J(0,0.07), J(-2.2+t*3.2,0.07), J(0,0.15)]],
+          [0.50, t => { const r1=Rnd(),r2=Rnd(),sr=Math.sqrt(r1); const a=1-sr,b=sr*(1-r2),c=sr*r2; return [J(a*0+b*-1.8+c*1.8,0.07), J(a*2.8+b*1.0+c*1.0,0.07), J(0,0.14)]; }],
+          [0.12, t => [J(-1.8+t*3.6,0.06), J(1.0,0.06), J(0,0.12)]],
+          [0.10, t => [J(0,0.06), J(1.0+t*1.8,0.06), J(0,0.12)]],
+        ];
+      } else if (gesture === 'rude') {
+        // Skull 💀
+        sections = [
+          [0.22, t => { const th=t*Math.PI*2; return [J(Math.cos(th)*1.6,0.07), J(Math.sin(th)*1.6+0.4,0.07), J(0,0.16)]; }],
+          [0.12, t => { const th=t*Math.PI*2; return [J(-0.7+Math.cos(th)*0.45,0.05), J(0.3+Math.sin(th)*0.4,0.05), J(0,0.12)]; }],
+          [0.12, t => { const th=t*Math.PI*2; return [J( 0.7+Math.cos(th)*0.45,0.05), J(0.3+Math.sin(th)*0.4,0.05), J(0,0.12)]; }],
+          [0.08, t => [J(-1.55+t*3.1,0.06), J(-1.15,0.06), J(0,0.12)]],
+          [0.07, t => [J(-1.55+t*3.1,0.06), J(-1.75,0.06), J(0,0.12)]],
+          [0.04, t => [J(-1.0,0.05), J(-1.75+t*0.6,0.05), J(0,0.1)]],
+          [0.04, t => [J(-0.3,0.05), J(-1.75+t*0.6,0.05), J(0,0.1)]],
+          [0.04, t => [J( 0.3,0.05), J(-1.75+t*0.6,0.05), J(0,0.1)]],
+          [0.04, t => [J( 1.0,0.05), J(-1.75+t*0.6,0.05), J(0,0.1)]],
+          [0.09, t => { const r1=Rnd(),r2=Rnd(),sr=Math.sqrt(r1); const a=1-sr,b=sr*(1-r2),c=sr*r2; return [J(a*0+b*-0.4+c*0.4,0.05), J(a*0.7+b*-0.15+c*-0.15,0.05), J(0,0.1)]; }],
+          [0.10, t => { const th=Rnd()*Math.PI*2, r=Rnd()*1.4; return [J(Math.cos(th)*r,0.1), J(Math.sin(th)*r+0.4,0.1), J(0,0.15)]; }],
+        ];
+      } else if (gesture === 'palm') {
+        // Open hand ✋
+        sections = [
+          [0.09, t => [J(-1.55,0.07), J(-0.6+t*3.0,0.07), J(0,0.12)]],
+          [0.09, t => [J(-0.78,0.06), J(-0.3+t*3.5,0.06), J(0,0.12)]],
+          [0.09, t => [J( 0.0, 0.06), J(-0.3+t*3.7,0.06), J(0,0.12)]],
+          [0.09, t => [J( 0.78,0.06), J(-0.3+t*3.3,0.06), J(0,0.12)]],
+          [0.09, t => [J( 1.55,0.06), J(-0.3+t*2.6,0.06), J(0,0.12)]],
+          [0.20, t => { const th=Math.PI+t*Math.PI; return [J(Math.cos(th)*1.8,0.07), J(-0.3+Math.sin(th)*0.8,0.07), J(0,0.15)]; }],
+          [0.11, t => [J(-1.8+t*3.6,0.06), J(-0.3,0.06), J(0,0.12)]],
+        ];
+      } else {
+        sections = [[1.0, t => { const th=Rnd()*Math.PI*2, r=0.5+Rnd()*2.0; return [Math.cos(th)*r, Math.sin(th)*r, (Rnd()-0.5)*0.5]; }]];
+      }
+
+      const total = sections.reduce((s,[w])=>s+w, 0);
+      let idx=0;
+      for (const [w,fn] of sections) {
+        const n=Math.round(MAX*w/total);
+        for (let p=0; p<n&&idx<MAX; p++,idx++) {
+          const [x,y,z]=fn(p/n); T[idx*3]=x; T[idx*3+1]=y; T[idx*3+2]=z;
+        }
+      }
+      while (idx<MAX) { const [,fn]=sections[Math.floor(Rnd()*sections.length)]; const [x,y,z]=fn(Rnd()); T[idx*3]=x; T[idx*3+1]=y; T[idx*3+2]=z; idx++; }
+      // Shuffle
+      for (let i=MAX-1; i>0; i--) {
+        const j=Math.floor(Rnd()*(i+1)), ti=i*3, tj=j*3; let tmp;
+        tmp=T[ti]; T[ti]=T[tj]; T[tj]=tmp;
+        tmp=T[ti+1]; T[ti+1]=T[tj+1]; T[tj+1]=tmp;
+        tmp=T[ti+2]; T[ti+2]=T[tj+2]; T[tj+2]=tmp;
+      }
+    }
+
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
@@ -531,6 +667,19 @@
         if (transProgs[h] > 0) transProgs[h] = Math.max(0, transProgs[h] - cfg.transSpeed);
       }
 
+      // ── Hold timer + flash trigger ──────────────────────────────────────────
+      const dominant = gestures[0] !== 'none' ? gestures[0] : (gestures[1] !== 'none' ? gestures[1] : 'none');
+      if (dominant !== 'none' && dominant !== 'shrine') {
+        if (dominant !== holdGesture) { holdTimer = 0; holdGesture = dominant; }
+        holdTimer++;
+        if (!flashState.active && holdTimer > 190 && Math.random() < 0.004) {
+          buildFlashTargets(dominant);
+          flashState.active = true; flashState.gesture = dominant; flashState.frame = 0;
+        }
+      } else { holdTimer = 0; holdGesture = 'none'; }
+      if (flashState.active) { flashState.frame++; if (flashState.frame >= flashState.duration) flashState.active = false; }
+      const flashProg = flashState.active ? Math.sin(Math.PI * flashState.frame / flashState.duration) : 0;
+
       const pos = geo.attributes.position.array;
       const col = geo.attributes.color.array;
       const N   = cfg.count;
@@ -572,6 +721,13 @@
             pos[iy] = -2.5 - Math.random() * 1.0;
             velocities[iy] = Math.random() * 0.02;
           }
+        }
+
+        // Flash shape attraction — smoothly pulls particles into symbol silhouette
+        if (flashProg > 0) {
+          const fx=flashState.targets[ix], fy=flashState.targets[iy], fz=flashState.targets[iz];
+          const str = 0.18 * flashProg;
+          velocities[ix] += (fx-px)*str; velocities[iy] += (fy-py)*str; velocities[iz] += (fz-pz)*str;
         }
 
         const dampY = (gestures[0]==='point' || gestures[1]==='point') ? 0.95 : cfg.damp;
