@@ -169,6 +169,7 @@
     🏯 MALEVOLENT SHRINE → two hands
     🙏 PRAYER → two open hands together
     🖕 RUDE → middle finger only
+    🤙 YOLO → pinky + thumb out
   </div>
 
   <div id="settings-toggle">⚙ SETTINGS</div>
@@ -249,6 +250,7 @@
       <div class="s-row"><span class="s-label">🏯 Mal. Shrine</span><input type="checkbox" id="cb-g-shrine" checked></div>
       <div class="s-row"><span class="s-label">🙏 Prayer</span><input type="checkbox" id="cb-g-prayer" checked></div>
       <div class="s-row"><span class="s-label">🖕 Rude</span><input type="checkbox" id="cb-g-rude" checked></div>
+      <div class="s-row"><span class="s-label">🤙 YOLO</span><input type="checkbox" id="cb-g-yolo" checked></div>
     </div>
   </div>
 
@@ -276,7 +278,7 @@
     // ─── Gesture enable/disable ───────────────────────────────────────────
     const gestureEnabled = {
       fist: true, palm: true, point: true,
-      pinch: true, peace: true, void: true, shrine: true, prayer: true, rude: true,
+      pinch: true, peace: true, void: true, shrine: true, prayer: true, rude: true, yolo: true,
     };
 
     // ─── Config ───────────────────────────────────────────────────────────
@@ -494,6 +496,24 @@
         velocities[iy] += (Math.random() - 0.5) * 0.07 * gp * scale;
         velocities[iz] += (Math.random() - 0.5) * 0.07 * gp * scale;
 
+      } else if (g === 'yolo') {
+        // YOLO / Breach — violent omnidirectional blast with gravity drag
+        const blast  = (0.09 + 0.05 * Math.abs(Math.sin(time * 12))) * gp * scale;
+        const grav   = 0.018 * gp * scale; // downward pull after blast
+        velocities[ix] += (px/dist) * blast;
+        velocities[iy] += (py/dist) * blast - grav;
+        velocities[iz] += (pz/dist) * blast;
+        // Spring-back so particles don't escape
+        velocities[ix] += (origins[ix]-px) * 0.018 * gp * scale;
+        velocities[iy] += (origins[iy]-py) * 0.012 * gp * scale;
+        velocities[iz] += (origins[iz]-pz) * 0.018 * gp * scale;
+        // Sharp crackling noise bursts
+        if (Math.random() < 0.3) {
+          velocities[ix] += (Math.random()-0.5) * 0.22 * gp * scale;
+          velocities[iy] += (Math.random()-0.5) * 0.22 * gp * scale;
+          velocities[iz] += (Math.random()-0.5) * 0.22 * gp * scale;
+        }
+
       } else {
         // idle
         velocities[ix] += (origins[ix]-px) * 0.025 * scale;
@@ -603,7 +623,7 @@
 
     // ─── Gesture colors as hex numbers ────────────────────────────────────
     function gestureColor3(g) {
-      const map = { fist:0xff1a00, palm:0x00ddff, point:0xffcc00, pinch:0xcc00ff, peace:0x00ff88, void:0x3366ff, shrine:0xff2200, prayer:0xffd080, rude:0xff0066, none:0xffffff };
+      const map = { fist:0xff1a00, palm:0x00ddff, point:0xffcc00, pinch:0xcc00ff, peace:0x00ff88, void:0x3366ff, shrine:0xff2200, prayer:0xffd080, rude:0xff0066, yolo:0xffe000, none:0xffffff };
       return map[g] ?? 0xffffff;
     }
 
@@ -627,6 +647,7 @@
       if (gestureEnabled.peace  && !sideways && indexUp && middleUp && !ringUp && !pinkyUp) return 'peace';
       if (gestureEnabled.point  && indexUp && !middleUp && !ringUp && !pinkyUp)             return 'point';
       if (gestureEnabled.rude   && middleUp && !indexUp && !ringUp && !pinkyUp)             return 'rude';
+      if (gestureEnabled.yolo   && pinkyUp && !indexUp && !middleUp && !ringUp)              return 'yolo';
       if (gestureEnabled.palm   && upCount >= 3)                                            return 'palm';
       if (gestureEnabled.fist   && upCount === 0)                                           return 'fist';
       return 'none';
@@ -661,12 +682,12 @@
     const LABELS = {
       fist:'✊ FIST', palm:'🖐 PALM', point:'☝️ POINT',
       pinch:'🤏 PINCH', peace:'✌️ PEACE', void:'🌌 VOID',
-      shrine:'🏯 SHRINE', prayer:'🙏 PRAYER', rude:'🖕 RUDE', none:'—',
+      shrine:'🏯 SHRINE', prayer:'🙏 PRAYER', rude:'🖕 RUDE', yolo:'🤙 YOLO', none:'—',
     };
     const COLORS = {
       fist:'#ff4422', palm:'#00ddff', point:'#ffcc00',
       pinch:'#cc44ff', peace:'#00ff88', void:'#3366ff',
-      shrine:'#ff2200', prayer:'#ffd080', rude:'#ff0066', none:'rgba(255,255,255,0.75)',
+      shrine:'#ff2200', prayer:'#ffd080', rude:'#ff0066', yolo:'#ffe000', none:'rgba(255,255,255,0.75)',
     };
 
     // Hand colors for landmark overlay (hand 0 = warm, hand 1 = cool)
@@ -683,6 +704,7 @@
       shrine: "'Cinzel Decorative', serif",
       prayer: "'Cinzel', serif",
       rude:   "'Bebas Neue', sans-serif",
+      yolo:   "'Bebas Neue', sans-serif",
     };
     const GESTURE_TEXT = {
       fist: 'FIST', palm: 'PALM', point: 'POINT',
@@ -690,6 +712,7 @@
       shrine: 'Malevolent Shrine',
       prayer: 'Prayer',
       rude:   'RUDE',
+      yolo:   'YOLO',
     };
 
     let cinematicMode = false;
@@ -1023,7 +1046,7 @@
     document.getElementById('cb-hint').addEventListener('change',      e => { document.getElementById('hint').style.opacity = e.target.checked ? '1' : '0'; });
 
     // Gesture toggles
-    for (const key of ['fist','palm','point','pinch','peace','void','shrine','prayer','rude']) {
+    for (const key of ['fist','palm','point','pinch','peace','void','shrine','prayer','rude','yolo']) {
       document.getElementById(`cb-g-${key}`).addEventListener('change', e => {
         gestureEnabled[key] = e.target.checked;
       });
