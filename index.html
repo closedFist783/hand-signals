@@ -372,7 +372,8 @@
     // ─── Flash shape system ───────────────────────────────────────────────────
     // When a gesture is held long enough, particles briefly form a recognizable symbol
     const flashState = {
-      active: false, gesture: null, frame: 0, duration: 110,
+      active: false, gesture: null, frame: 0,
+      formF: 120, holdF: 240, dissolveF: 120, // form 2s / hold 4s / dissolve 2s
       targets: new Float32Array(MAX * 3),
     };
     let holdTimer    = 0;
@@ -385,13 +386,26 @@
       let sections;
 
       if (gesture === 'yolo') {
-        // Sailboat ⛵
+        // Sailboat ⛵ — clean classic profile: hull arc + mast + large mainsail + jib
         sections = [
-          [0.22, t => { const a=Math.PI*t; return [J(Math.cos(a)*2.0,0.1), J(-1.8+Math.sin(a)*0.35,0.1), J(0,0.2)]; }],
-          [0.06, t => [J(0,0.06), J(-1.4+t*2.3,0.06), J(0,0.08)]],
-          [0.42, t => { const r1=Rnd(),r2=Rnd(),sr=Math.sqrt(r1); const a=1-sr,b=sr*(1-r2),c=sr*r2; return [J(a*0+b*2.0+c*0,0.07), J(a*1.1+b*-0.8+c*-0.8,0.07), J(0,0.14)]; }],
-          [0.20, t => { const r1=Rnd(),r2=Rnd(),sr=Math.sqrt(r1); const a=1-sr,b=sr*(1-r2),c=sr*r2; return [J(a*0+b*-1.6+c*0,0.07), J(a*0.2+b*-0.8+c*-0.8,0.07), J(0,0.14)]; }],
-          [0.10, t => [J((t*2-1)*2.1,0.08), J(-1.8,0.07), J(0,0.18)]],
+          // Hull arc (wide parabola bottom)
+          [0.14, t => { const x=(t*2-1)*2.4; return [J(x,0.08), J(-1.6+0.28*(x/2.4)**2,0.07), J(0,0.18)]; }],
+          // Hull sides (straight walls up to deck)
+          [0.05, t => [J(-2.4,0.06), J(-1.6+t*0.7,0.06), J(0,0.1)]],
+          [0.05, t => [J( 2.4,0.06), J(-1.6+t*0.7,0.06), J(0,0.1)]],
+          // Deck line
+          [0.07, t => [J(-2.4+t*4.8,0.07), J(-0.9,0.06), J(0,0.14)]],
+          // Mast (tall, prominent)
+          [0.07, t => [J(0,0.05), J(-0.9+t*3.9,0.05), J(0,0.08)]],
+          // Main sail — large right triangle: mast top → deck-right → deck-center
+          // (0, 3.0), (0, -0.9), (2.6, -0.9) — fill with random points inside triangle
+          [0.38, t => { const r1=Rnd(),r2=Rnd(); const u=1-Math.sqrt(r1), v=Math.sqrt(r1)*(1-r2), w=Math.sqrt(r1)*r2; return [J(u*0+v*0+w*2.6,0.07), J(u*3.0+v*-0.9+w*-0.9,0.07), J(0,0.13)]; }],
+          // Main sail edges
+          [0.06, t => [J(0,0.05), J(-0.9+t*3.9,0.05), J(0,0.1)]], // leading edge up mast
+          [0.06, t => [J(t*2.6,0.06), J(-0.9,0.05), J(0,0.1)]], // boom along deck
+          [0.08, t => { const x=t*2.6, y=-0.9+(3.0-(-0.9))*(1-t); return [J(x,0.06), J(y,0.06), J(0,0.12)]; }], // hypotenuse
+          // Jib (front sail) — small triangle: mast top, mast-deck, bow
+          [0.04, t => { const r1=Rnd(),r2=Rnd(); const u=1-Math.sqrt(r1), v=Math.sqrt(r1)*(1-r2), w=Math.sqrt(r1)*r2; return [J(u*0+v*0+w*-2.4,0.07), J(u*2.2+v*-0.9+w*-1.0,0.07), J(0,0.13)]; }],
         ];
       } else if (gesture === 'prayer') {
         // Pagoda / temple 🏛️
@@ -677,8 +691,18 @@
           flashState.active = true; flashState.gesture = dominant; flashState.frame = 0;
         }
       } else { holdTimer = 0; holdGesture = 'none'; }
-      if (flashState.active) { flashState.frame++; if (flashState.frame >= flashState.duration) flashState.active = false; }
-      const flashProg = flashState.active ? Math.sin(Math.PI * flashState.frame / flashState.duration) : 0;
+      if (flashState.active) {
+        flashState.frame++;
+        const totalF = flashState.formF + flashState.holdF + flashState.dissolveF;
+        if (flashState.frame >= totalF) flashState.active = false;
+      }
+      let flashProg = 0;
+      if (flashState.active) {
+        const {frame: ff, formF, holdF, dissolveF} = flashState;
+        if (ff < formF)                { flashProg = Math.sin(Math.PI * 0.5 * ff / formF); }
+        else if (ff < formF + holdF)   { flashProg = 1.0; }
+        else                           { flashProg = Math.cos(Math.PI * 0.5 * (ff - formF - holdF) / dissolveF); }
+      }
 
       const pos = geo.attributes.position.array;
       const col = geo.attributes.color.array;
@@ -760,6 +784,13 @@
       const anyPoint  = gestures[0]==='point' || gestures[1]==='point';
       const anyShrine = gestures[0]==='shrine' || gestures[1]==='shrine';
       const TILT_MAX  = 0.26; // ±15 degrees in radians
+
+      // During flash: lerp mesh rotation toward facing camera (0,0,0)
+      if (flashProg > 0) {
+        const snap = 0.06 * flashProg;
+        coreMesh.rotation.x -= coreMesh.rotation.x * snap;
+        coreMesh.rotation.y -= coreMesh.rotation.y * snap;
+      }
 
       if (anyShrine) {
         // Shrine: horizontal rotation only, vertical tilt gently clamped to ±15°
