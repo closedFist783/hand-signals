@@ -497,22 +497,22 @@
         velocities[iz] += (Math.random() - 0.5) * 0.07 * gp * scale;
 
       } else if (g === 'yolo') {
-        // YOLO / Breach — violent omnidirectional blast with gravity drag
-        const blast  = (0.09 + 0.05 * Math.abs(Math.sin(time * 12))) * gp * scale;
-        const grav   = 0.018 * gp * scale; // downward pull after blast
-        velocities[ix] += (px/dist) * blast;
-        velocities[iy] += (py/dist) * blast - grav;
-        velocities[iz] += (pz/dist) * blast;
-        // Spring-back so particles don't escape
-        velocities[ix] += (origins[ix]-px) * 0.018 * gp * scale;
-        velocities[iy] += (origins[iy]-py) * 0.012 * gp * scale;
-        velocities[iz] += (origins[iz]-pz) * 0.018 * gp * scale;
-        // Sharp crackling noise bursts
-        if (Math.random() < 0.3) {
-          velocities[ix] += (Math.random()-0.5) * 0.22 * gp * scale;
-          velocities[iy] += (Math.random()-0.5) * 0.22 * gp * scale;
-          velocities[iz] += (Math.random()-0.5) * 0.22 * gp * scale;
-        }
+        // YOLO / Beach — rolling ocean wave motion, chill and flowing
+        const wave   = Math.sin(time * 2.2 + px * 1.4 + pz * 0.8);
+        const swell  = Math.cos(time * 1.6 + dist * 1.2);
+        // Horizontal rolling push (wave sweep)
+        velocities[ix] += (wave * 0.045 + swell * 0.02) * gp * scale;
+        velocities[iz] += (swell * 0.035) * gp * scale;
+        // Gentle vertical bob — rises on crest, falls in trough
+        velocities[iy] += wave * 0.032 * gp * scale;
+        // Soft spring back to origin
+        velocities[ix] += (origins[ix]-px) * 0.022 * gp * scale;
+        velocities[iy] += (origins[iy]-py) * 0.018 * gp * scale;
+        velocities[iz] += (origins[iz]-pz) * 0.022 * gp * scale;
+        // Light foam noise
+        velocities[ix] += (Math.random()-0.5) * 0.014 * gp * scale;
+        velocities[iy] += (Math.random()-0.5) * 0.010 * gp * scale;
+        velocities[iz] += (Math.random()-0.5) * 0.014 * gp * scale;
 
       } else {
         // idle
@@ -623,7 +623,7 @@
 
     // ─── Gesture colors as hex numbers ────────────────────────────────────
     function gestureColor3(g) {
-      const map = { fist:0xff1a00, palm:0x00ddff, point:0xffcc00, pinch:0xcc00ff, peace:0x00ff88, void:0x3366ff, shrine:0xff2200, prayer:0xffd080, rude:0xff0066, yolo:0xffe000, none:0xffffff };
+      const map = { fist:0xff1a00, palm:0x00ddff, point:0xffcc00, pinch:0xcc00ff, peace:0x00ff88, void:0x3366ff, shrine:0xff2200, prayer:0xffd080, rude:0xff0066, yolo:0x00e5ff, none:0xffffff };
       return map[g] ?? 0xffffff;
     }
 
@@ -687,7 +687,7 @@
     const COLORS = {
       fist:'#ff4422', palm:'#00ddff', point:'#ffcc00',
       pinch:'#cc44ff', peace:'#00ff88', void:'#3366ff',
-      shrine:'#ff2200', prayer:'#ffd080', rude:'#ff0066', yolo:'#ffe000', none:'rgba(255,255,255,0.75)',
+      shrine:'#ff2200', prayer:'#ffd080', rude:'#ff0066', yolo:'#00e5ff', none:'rgba(255,255,255,0.75)',
     };
 
     // Hand colors for landmark overlay (hand 0 = warm, hand 1 = cool)
