@@ -55,6 +55,20 @@
       50%      { opacity: 1.0; }
     }
 
+    #label-prayer {
+      position: fixed; bottom: 36px; left: 50%;
+      transform: translateX(-50%);
+      color: #ffd080; font-size: 16px; letter-spacing: 8px;
+      font-family: 'Cinzel', serif;
+      text-transform: uppercase; pointer-events: none;
+      user-select: none; white-space: nowrap;
+      display: none;
+      text-shadow: 0 0 14px currentColor, 0 0 36px color-mix(in srgb, currentColor 55%, transparent),
+                   0 0 70px color-mix(in srgb, currentColor 25%, transparent),
+                   0 2px 6px rgba(0,0,0,0.95);
+      animation: shrine-pulse 2.4s ease-in-out infinite;
+    }
+
     #hint {
       position: fixed; bottom: 70px; left: 24px;
       color: rgba(255,255,255,0.2); font-size: 11px;
@@ -143,6 +157,7 @@
   <div class="gesture-label" id="label-left">—</div>
   <div class="gesture-label" id="label-right">—</div>
   <div id="label-shrine">🏯&nbsp; MALEVOLENT SHRINE</div>
+  <div id="label-prayer">🙏&nbsp; PRAYER</div>
 
   <div id="hint">
     ✊ FIST → collapse<br>
@@ -152,6 +167,7 @@
     ✌️ PEACE → wave<br>
     🌌 INFINITE VOID → sphere<br>
     🏯 MALEVOLENT SHRINE → two hands
+    🙏 PRAYER → two open hands together
   </div>
 
   <div id="settings-toggle">⚙ SETTINGS</div>
@@ -230,6 +246,7 @@
       <div class="s-row"><span class="s-label">✌️ Peace</span>      <input type="checkbox" id="cb-g-peace"  checked></div>
       <div class="s-row"><span class="s-label">🌌 Infinite Void</span><input type="checkbox" id="cb-g-void" checked></div>
       <div class="s-row"><span class="s-label">🏯 Mal. Shrine</span><input type="checkbox" id="cb-g-shrine" checked></div>
+      <div class="s-row"><span class="s-label">🙏 Prayer</span><input type="checkbox" id="cb-g-prayer" checked></div>
     </div>
   </div>
 
@@ -257,7 +274,7 @@
     // ─── Gesture enable/disable ───────────────────────────────────────────
     const gestureEnabled = {
       fist: true, palm: true, point: true,
-      pinch: true, peace: true, void: true, shrine: true,
+      pinch: true, peace: true, void: true, shrine: true, prayer: true,
     };
 
     // ─── Config ───────────────────────────────────────────────────────────
@@ -453,6 +470,21 @@
         velocities[iy] += (Math.random() - 0.5) * 0.055 * gp * scale;
         velocities[iz] += (Math.random() - 0.5) * 0.025 * gp * scale;
 
+      } else if (g === 'prayer') {
+        // Prayer — particles gently ascend in a slow golden spiral/halo
+        const sphereR = 2.4, dr = dist - sphereR;
+        // Gentle lift toward halo ring + slow inward pull to ring radius
+        velocities[iy] += (0.025 + Math.sin(time*1.2 + dist*2) * 0.012) * gp * scale;
+        velocities[ix] += (-(px/dist)*dr*0.028 - py*0.008) * gp * scale;
+        velocities[iz] += (-(pz/dist)*dr*0.028 + py*0.008) * gp * scale;
+        // Very gentle slow rotation
+        velocities[ix] += (-pz * 0.012) * gp * scale;
+        velocities[iz] += ( px * 0.012) * gp * scale;
+        // Soft noise (much calmer than shrine)
+        velocities[ix] += (Math.random() - 0.5) * 0.012 * gp * scale;
+        velocities[iy] += (Math.random() - 0.5) * 0.008 * gp * scale;
+        velocities[iz] += (Math.random() - 0.5) * 0.012 * gp * scale;
+
       } else {
         // idle
         velocities[ix] += (origins[ix]-px) * 0.025 * scale;
@@ -555,7 +587,7 @@
 
     // ─── Gesture colors as hex numbers ────────────────────────────────────
     function gestureColor3(g) {
-      const map = { fist:0xff1a00, palm:0x00ddff, point:0xffcc00, pinch:0xcc00ff, peace:0x00ff88, void:0x3366ff, shrine:0xff2200, none:0xffffff };
+      const map = { fist:0xff1a00, palm:0x00ddff, point:0xffcc00, pinch:0xcc00ff, peace:0x00ff88, void:0x3366ff, shrine:0xff2200, prayer:0xffd080, none:0xffffff };
       return map[g] ?? 0xffffff;
     }
 
@@ -612,12 +644,12 @@
     const LABELS = {
       fist:'✊ FIST', palm:'🖐 PALM', point:'☝️ POINT',
       pinch:'🤏 PINCH', peace:'✌️ PEACE', void:'🌌 VOID',
-      shrine:'🏯 SHRINE', none:'—',
+      shrine:'🏯 SHRINE', prayer:'🙏 PRAYER', none:'—',
     };
     const COLORS = {
       fist:'#ff4422', palm:'#00ddff', point:'#ffcc00',
       pinch:'#cc44ff', peace:'#00ff88', void:'#3366ff',
-      shrine:'#ff2200', none:'rgba(255,255,255,0.75)',
+      shrine:'#ff2200', prayer:'#ffd080', none:'rgba(255,255,255,0.75)',
     };
 
     // Hand colors for landmark overlay (hand 0 = warm, hand 1 = cool)
@@ -632,11 +664,13 @@
       peace:  "'Josefin Sans', sans-serif",
       void:   "'Cinzel Decorative', serif",
       shrine: "'Cinzel Decorative', serif",
+      prayer: "'Cinzel', serif",
     };
     const GESTURE_TEXT = {
       fist: 'FIST', palm: 'PALM', point: 'POINT',
       pinch: 'PINCH', peace: 'PEACE', void: 'VOID',
       shrine: 'Malevolent Shrine',
+      prayer: 'Prayer',
     };
 
     let cinematicMode = false;
@@ -705,6 +739,21 @@
     }
 
     let shrineLocked    = false;  // true once shrine is entered, stays until explicit exit
+    let prayerLocked    = false;  // true once prayer is entered
+
+    function isPrayerHand(lm) {
+      if (!lm) return false;
+      // All 4 fingers extended (open palm, pointing up) and hand is upright
+      const indexUp  = fingerExtended(lm, 8,  6);
+      const middleUp = fingerExtended(lm, 12, 10);
+      const ringUp   = fingerExtended(lm, 16, 14);
+      const pinkyUp  = fingerExtended(lm, 20, 18);
+      const handDx   = Math.abs(lm[9].x - lm[0].x);
+      const handDy   = Math.abs(lm[9].y - lm[0].y);
+      const upright  = handDy > handDx * 0.5; // hand is roughly vertical
+      return indexUp && middleUp && ringUp && pinkyUp && upright;
+    }
+
     const lastKnownLm   = [null, null]; // last good landmarks per hand (survives dropout)
     const SHRINE_ENTRY  = 0.28;   // hands must be THIS close (and approaching) to enter
     const SHRINE_EXIT   = 0.50;   // hands must separate past THIS distance to exit
@@ -800,6 +849,54 @@
         labelRight.style.visibility = 'visible';
       }
       if (gestures[0] === 'shrine' || gestures[1] === 'shrine') {
+        for (let s = 0; s < 2; s++) {
+          transProgs[s] = 1.0; gestures[s] = 'none';
+          pending[s].gesture = 'none'; pending[s].count = 0;
+          framesMissing[s] = 0;
+        }
+        labelLeft.textContent  = '—'; labelLeft.style.color  = COLORS.none;
+        labelRight.textContent = '—'; labelRight.style.color = COLORS.none;
+        updateCinematicLabel();
+      }
+
+      // ── Prayer lock-on logic ──────────────────────────────────────────
+      if (!shrineLocked && gestureEnabled.prayer) {
+        const lm0p = slotLandmarks[0], lm1p = slotLandmarks[1];
+        const k0p  = lastKnownLm[0],   k1p  = lastKnownLm[1];
+
+        if (!prayerLocked) {
+          if (lm0p && lm1p && isPrayerHand(lm0p) && isPrayerHand(lm1p) &&
+              dist2D(lm0p[9], lm1p[9]) < 0.32) {
+            prayerLocked = true;
+          }
+        } else {
+          const handsFar = k0p && k1p && dist2D(k0p[9], k1p[9]) > 0.52;
+          if (handsFar) prayerLocked = false;
+        }
+      } else if (!gestureEnabled.prayer) {
+        prayerLocked = false;
+      }
+
+      if (prayerLocked && !shrineLocked) {
+        if (gestures[0] !== 'prayer') { transProgs[0] = 1.0; gestures[0] = 'prayer'; updateCinematicLabel(); }
+        if (gestures[1] !== 'prayer') { transProgs[1] = 1.0; gestures[1] = 'prayer'; updateCinematicLabel(); }
+        if (!cinematicMode) {
+          labelLeft.style.visibility  = 'hidden';
+          labelRight.style.visibility = 'hidden';
+          document.getElementById('label-prayer').style.display = 'block';
+        }
+        return;
+      }
+
+      // Prayer just released
+      document.getElementById('label-prayer').style.display = 'none';
+      if (!cinematicMode) {
+        if (!shrineLocked) {
+          labelLeft.style.visibility  = 'visible';
+          labelRight.style.visibility = 'visible';
+        }
+      }
+      if ((gestures[0] === 'prayer' || gestures[1] === 'prayer') && !prayerLocked) {
         for (let s = 0; s < 2; s++) {
           transProgs[s] = 1.0; gestures[s] = 'none';
           pending[s].gesture = 'none'; pending[s].count = 0;
@@ -907,7 +1004,7 @@
     document.getElementById('cb-hint').addEventListener('change',      e => { document.getElementById('hint').style.opacity = e.target.checked ? '1' : '0'; });
 
     // Gesture toggles
-    for (const key of ['fist','palm','point','pinch','peace','void','shrine']) {
+    for (const key of ['fist','palm','point','pinch','peace','void','shrine','prayer']) {
       document.getElementById(`cb-g-${key}`).addEventListener('change', e => {
         gestureEnabled[key] = e.target.checked;
       });
