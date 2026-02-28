@@ -642,7 +642,7 @@
       const handDy   = Math.abs(lm[9].y - lm[0].y);
       const sideways = handDx > handDy * cfg.voidThreshold;
 
-      if (gestureEnabled.void   && sideways && upCount <= 1)                                return 'void';
+      if (gestureEnabled.void   && sideways && upCount <= 1 && !pinkyUp)                   return 'void';
       if (gestureEnabled.pinch  && thumbD < 0.07 && !middleUp && !ringUp && !pinkyUp)       return 'pinch';
       if (gestureEnabled.peace  && !sideways && indexUp && middleUp && !ringUp && !pinkyUp) return 'peace';
       if (gestureEnabled.point  && indexUp && !middleUp && !ringUp && !pinkyUp)             return 'point';
